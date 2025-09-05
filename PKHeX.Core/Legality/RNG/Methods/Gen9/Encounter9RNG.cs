@@ -13,7 +13,7 @@ public static class Encounter9RNG
     /// </summary>
     /// <returns>True if the generated data matches the <see cref="criteria"/>.</returns>
     public static bool TryApply32<TEnc>(this TEnc enc, PK9 pk, in ulong init, in GenerateParam9 param, in EncounterCriteria criteria)
-        where  TEnc : IEncounterTemplate, ITeraRaid9
+        where TEnc : IEncounterTemplate, ITeraRaid9
     {
         const int maxCtr = 100_000;
         var rand = new Xoroshiro128Plus(init);
@@ -21,7 +21,10 @@ public static class Encounter9RNG
         {
             uint seed = (uint)rand.NextInt(uint.MaxValue);
             if (!enc.CanBeEncountered(seed))
+            {
+                ctr--; // don't consider it an attempt
                 continue;
+            }
             if (!GenerateData(pk, param, criteria, seed, param.IVs.IsSpecified))
                 continue;
 

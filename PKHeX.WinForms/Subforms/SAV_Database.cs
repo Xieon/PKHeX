@@ -56,6 +56,8 @@ public partial class SAV_Database : Form
         };
         Tab_Advanced.Controls.Add(UC_Builder);
         UC_Builder.SendToBack();
+        if (!Directory.Exists(DatabasePath))
+            Menu_OpenDB.Visible = false;
 
         SAV = saveditor.SAV;
         BoxView = saveditor;
@@ -151,6 +153,7 @@ public partial class SAV_Database : Form
         CB_Format.Items[0] = MsgAny;
         CenterToParent();
         Closing += (_, _) => ShowSet.Clear();
+        CB_Species.Select();
     }
 
     private void ClickView(object sender, EventArgs e)
@@ -197,25 +200,22 @@ public partial class SAV_Database : Form
         var entry = Results[index];
         var pk = entry.Entity;
 
-        if (entry.Source is SlotInfoFile f)
+        if (entry.Source is SlotInfoFileSingle(var path))
         {
             // Data from Database: Delete file from disk
-            var path = f.Path;
             if (File.Exists(path))
                 File.Delete(path);
         }
-        else if (entry.Source is SlotInfoBox(var box, var slot) && entry.SAV == SAV)
+        else if (entry.Source is SlotInfoBox b && entry.SAV == SAV)
         {
             // Data from Box: Delete from save file
-            var change = new SlotInfoBox(box, slot);
-            var pkSAV = change.Read(SAV);
-
-            if (!pkSAV.DecryptedBoxData.SequenceEqual(pk.DecryptedBoxData)) // data still exists in SAV, unmodified
+            var exist = b.Read(SAV);
+            if (!exist.DecryptedBoxData.SequenceEqual(pk.DecryptedBoxData)) // data modified already?
             {
                 WinFormsUtil.Error(MsgDBDeleteFailModified, MsgDBDeleteFailWarning);
                 return;
             }
-            BoxView.EditEnv.Slots.Delete(change);
+            BoxView.EditEnv.Slots.Delete(b);
         }
         else
         {
@@ -251,7 +251,7 @@ public partial class SAV_Database : Form
 
         File.WriteAllBytes(path, pk.DecryptedBoxData);
 
-        var info = new SlotInfoFile(path);
+        var info = new SlotInfoFileSingle(path);
         var entry = new SlotCache(info, pk);
         Results.Add(entry);
 
@@ -286,36 +286,38 @@ public partial class SAV_Database : Form
 
         var comboAny = new ComboItem(MsgAny, -1);
 
-        var species = new List<ComboItem>(GameInfo.SpeciesDataSource)
+        var filtered = GameInfo.FilteredSources;
+        var source = filtered.Source;
+        var species = new List<ComboItem>(source.SpeciesDataSource)
         {
             [0] = comboAny // Replace (None) with "Any"
         };
         CB_Species.DataSource = species;
 
-        var items = new List<ComboItem>(GameInfo.ItemDataSource);
+        var items = new List<ComboItem>(filtered.Items);
         items.Insert(0, comboAny);
         CB_HeldItem.DataSource = items;
 
-        var natures = new List<ComboItem>(GameInfo.NatureDataSource);
+        var natures = new List<ComboItem>(source.NatureDataSource);
         natures.Insert(0, comboAny);
         CB_Nature.DataSource = natures;
 
-        var abilities = new List<ComboItem>(GameInfo.AbilityDataSource);
+        var abilities = new List<ComboItem>(source.AbilityDataSource);
         abilities.Insert(0, comboAny);
         CB_Ability.DataSource = abilities;
 
-        var versions = new List<ComboItem>(GameInfo.VersionDataSource);
+        var versions = new List<ComboItem>(source.VersionDataSource);
         versions.Insert(0, comboAny);
         versions.RemoveAt(versions.Count - 1); // None
         CB_GameOrigin.DataSource = versions;
 
-        var hptypes = GameInfo.Strings.types.AsSpan(1, HiddenPower.TypeCount);
+        var hptypes = source.Strings.HiddenPowerTypes;
         var types = Util.GetCBList(hptypes);
         types.Insert(0, comboAny);
         CB_HPType.DataSource = types;
 
         // Set the Move ComboBoxes too.
-        var moves = new List<ComboItem>(GameInfo.MoveDataSource);
+        var moves = new List<ComboItem>(filtered.Moves);
         moves.RemoveAt(0);
         moves.Insert(0, comboAny);
         {
@@ -450,17 +452,16 @@ public partial class SAV_Database : Form
 
     private static void TryAddPKMsFromSaveFilePath(ConcurrentBag<SlotCache> dbTemp, string file)
     {
-        var sav = SaveUtil.GetVariantSAV(file);
-        if (sav is null)
+        if (SaveUtil.TryGetSaveFile(file, out var sav))
         {
-            if (FileUtil.TryGetMemoryCard(file, out var mc))
-                TryAddPKMsFromMemoryCard(dbTemp, mc, file);
-            else
-                Debug.WriteLine($"Unable to load SaveFile: {file}");
+            SlotInfoLoader.AddFromSaveFile(sav, dbTemp);
             return;
         }
 
-        SlotInfoLoader.AddFromSaveFile(sav, dbTemp);
+        if (FileUtil.TryGetMemoryCard(file, out var mc))
+            TryAddPKMsFromMemoryCard(dbTemp, mc, file);
+        else
+            Debug.WriteLine($"Unable to load SaveFile: {file}");
     }
 
     private static void TryAddPKMsFromMemoryCard(ConcurrentBag<SlotCache> dbTemp, SAV3GCMemoryCard mc, string file)
@@ -470,17 +471,16 @@ public partial class SAV_Database : Form
             return;
 
         if (mc.HasCOLO)
-            TryAdd(dbTemp, mc, file, GameVersion.COLO);
+            TryAdd(dbTemp, mc, file, SaveFileType.Colosseum);
         if (mc.HasXD)
-            TryAdd(dbTemp, mc, file, GameVersion.XD);
+            TryAdd(dbTemp, mc, file, SaveFileType.XD);
         if (mc.HasRSBOX)
-            TryAdd(dbTemp, mc, file, GameVersion.RSBOX);
+            TryAdd(dbTemp, mc, file, SaveFileType.RSBox);
 
-        static void TryAdd(ConcurrentBag<SlotCache> dbTemp, SAV3GCMemoryCard mc, string path, GameVersion game)
+        static void TryAdd(ConcurrentBag<SlotCache> dbTemp, SAV3GCMemoryCard mc, string path, SaveFileType game)
         {
             mc.SelectSaveGame(game);
-            var sav = SaveUtil.GetVariantSAV(mc);
-            if (sav is null)
+            if (!SaveUtil.TryGetSaveFile(mc, out var sav))
                 return;
             sav.Metadata.SetExtraInfo(path);
             SlotInfoLoader.AddFromSaveFile(sav, dbTemp);
@@ -612,26 +612,33 @@ public partial class SAV_Database : Form
     // ReSharper disable once AsyncVoidMethod
     private async void B_Search_Click(object sender, EventArgs e)
     {
-        B_Search.Enabled = false;
-        var search = SearchDatabase();
-
-        bool legalSearch = Menu_SearchLegal.Checked ^ Menu_SearchIllegal.Checked;
-        bool wordFilter = ParseSettings.Settings.WordFilter.CheckWordFilter;
-        if (wordFilter && legalSearch && WinFormsUtil.Prompt(MessageBoxButtons.YesNo, MsgDBSearchLegalityWordfilter) == DialogResult.No)
-            ParseSettings.Settings.WordFilter.CheckWordFilter = false;
-        var results = await Task.Run(() => search.ToList()).ConfigureAwait(true);
-        ParseSettings.Settings.WordFilter.CheckWordFilter = wordFilter;
-
-        if (results.Count == 0)
+        try
         {
-            if (!Menu_SearchBoxes.Checked && !Menu_SearchDatabase.Checked && !Menu_SearchBackups.Checked)
-                WinFormsUtil.Alert(MsgDBSearchFail, MsgDBSearchNone);
-            else
-                WinFormsUtil.Alert(MsgDBSearchNone);
+            B_Search.Enabled = false;
+            var search = SearchDatabase();
+
+            bool legalSearch = Menu_SearchLegal.Checked ^ Menu_SearchIllegal.Checked;
+            bool wordFilter = ParseSettings.Settings.WordFilter.CheckWordFilter;
+            if (wordFilter && legalSearch && WinFormsUtil.Prompt(MessageBoxButtons.YesNo, MsgDBSearchLegalityWordfilter) == DialogResult.No)
+                ParseSettings.Settings.WordFilter.CheckWordFilter = false;
+            var results = await Task.Run(() => search.ToList()).ConfigureAwait(true);
+            ParseSettings.Settings.WordFilter.CheckWordFilter = wordFilter;
+
+            if (results.Count == 0)
+            {
+                if (!Menu_SearchBoxes.Checked && !Menu_SearchDatabase.Checked && !Menu_SearchBackups.Checked)
+                    WinFormsUtil.Alert(MsgDBSearchFail, MsgDBSearchNone);
+                else
+                    WinFormsUtil.Alert(MsgDBSearchNone);
+            }
+            SetResults(results); // updates Count Label as well.
+            System.Media.SystemSounds.Asterisk.Play();
+            B_Search.Enabled = true;
         }
-        SetResults(results); // updates Count Label as well.
-        System.Media.SystemSounds.Asterisk.Play();
-        B_Search.Enabled = true;
+        catch
+        {
+            // Ignore.
+        }
     }
 
     private void UpdateScroll(object sender, ScrollEventArgs e)
@@ -751,8 +758,7 @@ public partial class SAV_Database : Form
         foreach (var entry in duplicates)
         {
             var src = entry.Source;
-            var path = ((SlotInfoFile)src).Path;
-            if (!File.Exists(path))
+            if (src is not SlotInfoFileSingle(var path) || !File.Exists(path))
                 continue;
 
             try { File.Delete(path); ++deleted; }
@@ -777,13 +783,13 @@ public partial class SAV_Database : Form
     {
         // This isn't displayed to the user, so just return the quickest -- Utc (not local time).
         var src = arg.Source;
-        if (src is not SlotInfoFile f)
+        if (src is not SlotInfoFileSingle(var path))
             return DateTime.UtcNow;
-        return File.GetLastWriteTimeUtc(f.Path);
+        return File.GetLastWriteTimeUtc(path);
     }
 
     private bool IsBackupSaveFile(SlotCache pk) => pk.SAV is not FakeSaveFile && pk.SAV != SAV;
-    private bool IsIndividualFilePKMDB(SlotCache pk) => pk.Source is SlotInfoFile f && f.Path.StartsWith(DatabasePath + Path.DirectorySeparatorChar, StringComparison.Ordinal);
+    private bool IsIndividualFilePKMDB(SlotCache pk) => pk.Source is SlotInfoFileSingle(var path) && path.StartsWith(DatabasePath + Path.DirectorySeparatorChar, StringComparison.Ordinal);
 
     private void L_Viewed_MouseEnter(object sender, EventArgs e) => hover.SetToolTip(L_Viewed, L_Viewed.Text);
 
@@ -793,7 +799,8 @@ public partial class SAV_Database : Form
         if (!GetShiftedIndex(ref index))
             return;
 
-        ShowSet.Show(pb, Results[index].Entity);
+        var ent = Results[index];
+        ShowSet.Show(pb, ent.Entity, ent.Source.Type);
     }
 
     private void B_Add_Click(object sender, EventArgs e)

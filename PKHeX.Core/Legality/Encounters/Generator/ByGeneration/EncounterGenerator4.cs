@@ -21,9 +21,9 @@ public sealed class EncounterGenerator4 : IEncounterGenerator
         return GetEncounters(pk, chain, info);
     }
 
-    public IEnumerable<IEncounterable> GetPossible(PKM pk, EvoCriteria[] chain, GameVersion game, EncounterTypeGroup groups)
+    public IEnumerable<IEncounterable> GetPossible(PKM pk, EvoCriteria[] chain, GameVersion version, EncounterTypeGroup groups)
     {
-        var iterator = new EncounterPossible4(chain, groups, game, pk);
+        var iterator = new EncounterPossible4(chain, groups, version, pk);
         foreach (var enc in iterator)
             yield return enc;
     }
@@ -35,10 +35,10 @@ public sealed class EncounterGenerator4 : IEncounterGenerator
         PIDIVDefer,
 
         // Illegal
-        PIDIV,
-        Tile,
-        Ball,
         SlotNumber,
+        Ball,
+        Tile,
+        PIDIV,
     }
 
     private struct Deferral
@@ -48,7 +48,7 @@ public sealed class EncounterGenerator4 : IEncounterGenerator
 
         public void Update(DeferralType type, IEncounterable enc)
         {
-            if (Type >= type)
+            if (type >= Type && Encounter is not null)
                 return;
             Type = type;
             Encounter = enc;

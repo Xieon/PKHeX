@@ -16,7 +16,9 @@ internal static class Encounters3Colo
     /// <summary>
     /// When transferring from Gen3->Gen4, a Spanish OT:Duking has the Á char changed to い.
     /// </summary>
-    /// <see cref="StringConverter345.TransferGlyphs34(System.ReadOnlySpan{byte},int,int,System.Span{byte})"/> cref=""/>
+    /// <remarks>
+    /// <see cref="StringConverter345.TransferGlyphs34(System.ReadOnlySpan{byte},int,int,System.Span{byte})"/>
+    /// </remarks>
     internal const string TrainerNameDukingSpanish4 = "GERMいN";
 
     internal static readonly EncounterGift3Colo[] Gifts =
@@ -76,7 +78,7 @@ internal static class Encounters3Colo
         new(24, 06000, Gligar)    { Species = 207, Level = 43, Moves = new(185,028,040,163), Location = 133 }, // Gligar: Hunter Frena @ Snagem Hideout
         new(25, 06000, First)     { Species = 234, Level = 43, Moves = new(310,095,043,036), Location = 058 }, // Stantler: Chaser Liaks @ The Under Subway
         new(25, 06000, First)     { Species = 234, Level = 43, Moves = new(310,095,043,036), Location = 133 }, // Stantler: Chaser Liaks @ Snagem Hideout
-        new(25, 06000, First)     { Species = 221, Level = 43, Moves = new(203,316,091,059), Location = 058 }, // Piloswine: Bodybuilder Lonia @ The Under Subway
+        new(26, 06000, First)     { Species = 221, Level = 43, Moves = new(203,316,091,059), Location = 058 }, // Piloswine: Bodybuilder Lonia @ The Under Subway
         new(26, 06000, First)     { Species = 221, Level = 43, Moves = new(203,316,091,059), Location = 134 }, // Piloswine: Bodybuilder Lonia @ Snagem Hideout
         new(27, 06000, First)     { Species = 215, Level = 43, Moves = new(185,103,154,196), Location = 058 }, // Sneasel: Rider Nelis @ The Under Subway
         new(27, 06000, First)     { Species = 215, Level = 43, Moves = new(185,103,154,196), Location = 134 }, // Sneasel: Rider Nelis @ Snagem Hideout

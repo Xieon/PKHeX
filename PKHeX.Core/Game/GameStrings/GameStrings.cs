@@ -27,7 +27,11 @@ public sealed class GameStrings : IBasicStrings
     public readonly string[] wallpapernames, puffs, walkercourses;
     public readonly string[] uggoods, ugspheres, ugtraps, ugtreasures;
     public readonly string[] seals, accessories, backdrops, poketchapps;
+    public readonly string[] console3ds, languageNames;
     private readonly string LanguageFilePrefix;
+
+    public ReadOnlySpan<string> HiddenPowerTypes => types.AsSpan(1, HiddenPower.TypeCount);
+    public readonly RibbonStrings Ribbons;
 
     public LanguageID Language { get; }
     public string EggName { get; }
@@ -59,6 +63,7 @@ public sealed class GameStrings : IBasicStrings
         Language = GameLanguage.GetLanguage(LanguageFilePrefix = langFilePrefix);
 
         ribbons = Get("ribbons");
+        Ribbons = new(ribbons);
 
         // Past Generation strings
         g3items = Get("ItemsG3");
@@ -124,6 +129,8 @@ public sealed class GameStrings : IBasicStrings
         accessories = Get("accessories");
         backdrops = Get("backdrops");
         poketchapps = Get("poketchapps");
+        console3ds = Get("console3ds");
+        languageNames = Get("language");
 
         EggName = specieslist[0];
         Gen4 = Get4("hgss");
@@ -722,11 +729,11 @@ public sealed class GameStrings : IBasicStrings
         }
     }
 
-    public string[] GetItemStrings(EntityContext context, GameVersion game = GameVersion.Any) => context switch
+    public string[] GetItemStrings(EntityContext context, GameVersion version = GameVersion.Any) => context switch
     {
         EntityContext.Gen1 => g1items,
         EntityContext.Gen2 => g2items,
-        EntityContext.Gen3 => GetItemStrings3(game),
+        EntityContext.Gen3 => GetItemStrings3(version),
         EntityContext.Gen4 => g4items, // mail names changed 4->5
         EntityContext.Gen8b => GetItemStrings8b(),
         EntityContext.Gen9 => GetItemStrings9(),
@@ -771,9 +778,9 @@ public sealed class GameStrings : IBasicStrings
         }
     }
 
-    private string[] GetItemStrings3(GameVersion game)
+    private string[] GetItemStrings3(GameVersion version)
     {
-        switch (game)
+        switch (version)
         {
             case GameVersion.COLO:
                 return g3coloitems;
@@ -784,10 +791,24 @@ public sealed class GameStrings : IBasicStrings
                     return g3items;
 
                 var g3ItemsWithEBerry = (string[])g3items.Clone();
-                g3ItemsWithEBerry[175] = EReaderBerrySettings.DisplayName;
+                g3ItemsWithEBerry[175] = GetEnigmaBerryName3(Language, EReaderBerrySettings.Name);
                 return g3ItemsWithEBerry;
         }
     }
+
+    private static string GetEnigmaBerryName3(LanguageID language, string berryName) => string.Format(language switch
+    {
+        Japanese => "{0}のみ",
+        English => "{0} BERRY",
+        German => "{0}BEERE",
+        French => "BAIE {0}",
+        Italian => "BACCA{0}",
+        Spanish => "BAYA {0}",
+        Korean => "{0}열매",
+        ChineseS => "{0}果",
+        ChineseT => "{0}果",
+        _ => throw new ArgumentOutOfRangeException(nameof(language), language, null),
+    }, berryName);
 
     /// <summary>
     /// Gets the location name for the specified parameters.
